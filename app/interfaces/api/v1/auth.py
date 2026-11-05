@@ -1,13 +1,17 @@
 from fastapi import APIRouter, Depends, HTTPException, status,Response
-from app.application.dto.auth_dto import RefreshRequest, RegisterRequest, LoginRequest, TokenResponse
+from app.application.dto.auth_dto import RefreshRequest, RegisterRequest, LoginRequest, TokenResponse,GoogleLoginRequest
 from app.application.use_cases.auth.register_user import RegisterUserUseCase
 from app.application.use_cases.auth.login_user import LoginUserUseCase
 from fastapi.security import HTTPAuthorizationCredentials
 from app.application.use_cases.auth.logout_user import LogoutUserUseCase
-from app.interfaces.api.deps import get_register_use_case, get_login_use_case, get_refresh_use_case,get_logout_use_case, optional_bearer
+from app.interfaces.api.deps import get_register_use_case, get_login_use_case, get_refresh_use_case,get_logout_use_case, optional_bearer,get_google_login_use_case
 from app.application.use_cases.auth.refresh_token import RefreshTokenUseCase
-router = APIRouter(prefix="/auth", tags=["Authentication"])
+from app.application.use_cases.auth.google_login import GoogleLoginUseCase
+from firebase_admin import auth as fb_auth, credentials
+from fastapi import APIRouter, HTTPException
 
+
+router = APIRouter(prefix="/auth", tags=["Authentication"])
 @router.post(
     "/register",
     response_model=TokenResponse,
@@ -67,3 +71,17 @@ async def logout(
 ):
     await use_case.execute(data.refresh_token, creds.credentials if creds else None)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+@router.post("/google", response_model=TokenResponse, summary="Login or register with Google")
+async def google_login(
+    data: GoogleLoginRequest,
+    use_case: GoogleLoginUseCase = Depends(get_google_login_use_case),
+):
+    try:
+        return await use_case.execute(data.id_token)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(e),
+            headers={"WWW-Authenticate": "Bearer"},
+        )

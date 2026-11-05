@@ -6,6 +6,7 @@ from app.infrastructure.security.password_hasher import BcryptPasswordService
 from app.infrastructure.security.jwt_service import JWTTokenService
 from app.application.use_cases.auth.register_user import RegisterUserUseCase
 from app.application.use_cases.auth.login_user import LoginUserUseCase
+from app.application.use_cases.auth.google_login import GoogleLoginUseCase
 from app.application.use_cases.auth.refresh_token import RefreshTokenUseCase
 from uuid import UUID
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -73,3 +74,9 @@ async def get_current_user(
     if not user or not user.is_active:
         raise unauthorized
     return user
+
+def get_google_login_use_case(
+    user_repo=Depends(get_user_repository),
+    token_service=Depends(get_token_service),
+) -> GoogleLoginUseCase:
+    return GoogleLoginUseCase(user_repo, token_service)
