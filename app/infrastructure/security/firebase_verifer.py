@@ -18,4 +18,5 @@ class FirebaseTokenVerifier:
             # verify_id_token is blocking, so run it off the event loop
             return await asyncio.to_thread(fb_auth.verify_id_token, id_token)
         except Exception:
+            logger.warning("Firebase verify failed: %s: %s", type(e).__name__, e)
             raise ValueError("Invalid Google sign-in token")
