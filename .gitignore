@@ -18,3 +18,4 @@ __pycache__/
 Thumbs.db
 firebase-service-account.json
 test_verify.py
+firebase_b64.txt
