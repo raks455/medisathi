@@ -18,7 +18,8 @@ class LoginUserUseCase:
         user = await self.user_repo.get_by_email(data.email.lower())
         if not user:
             raise ValueError("Invalid email or password")
-
+        if not user.hashed_password:   # use your real field name
+          raise ValueError("This account uses Google sign-in")
         if not self.password_service.verify_password(data.password, user.hashed_password):
             raise ValueError("Invalid email or password")
 

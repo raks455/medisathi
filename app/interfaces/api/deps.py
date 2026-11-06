@@ -12,7 +12,7 @@ from uuid import UUID
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from app.infrastructure.database.repositories.revoked_tokens_repository import SQLAlchemyRevokedTokenRepository
 from app.application.use_cases.auth.logout_user import LogoutUserUseCase
-
+from app.infrastructure.security.firebase_verifer import FirebaseTokenVerifier
 
 bearer_scheme = HTTPBearer()
 optional_bearer = HTTPBearer(auto_error=False)
@@ -75,8 +75,13 @@ async def get_current_user(
         raise unauthorized
     return user
 
+
+def get_firebase_verifier() -> FirebaseTokenVerifier:
+    return FirebaseTokenVerifier()
+
 def get_google_login_use_case(
     user_repo=Depends(get_user_repository),
     token_service=Depends(get_token_service),
+    verifier=Depends(get_firebase_verifier),
 ) -> GoogleLoginUseCase:
-    return GoogleLoginUseCase(user_repo, token_service)
+    return GoogleLoginUseCase(user_repo, token_service, verifier)

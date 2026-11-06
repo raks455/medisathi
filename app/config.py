@@ -10,6 +10,8 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = True
+    FIREBASE_SERVICE_ACCOUNT_FILE: str | None = None   # local: path to the key file
+   # FIREBASE_SERVICE_ACCOUNT_JSON: str | None = None   # Render: the whole JSON as an env var
 
 @lru_cache()
 def get_settings() -> Settings:

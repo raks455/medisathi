@@ -1,49 +1,41 @@
-# app/application/use_cases/auth/google_login.py
-from firebase_admin import auth as fb_auth
+from uuid import uuid4
+
 from app.application.dto.auth_dto import TokenResponse
-# + your user repository / JWT service imports
+from app.domain.entities.user import User
+
 
 class GoogleLoginUseCase:
-    def __init__(self, user_repo, token_service):  # inject whatever you use
+    def __init__(self, user_repo, token_service, verifier):
         self.user_repo = user_repo
         self.token_service = token_service
+        self.verifier = verifier
 
     async def execute(self, id_token: str) -> TokenResponse:
-        try:
-            # Verify the Google ID token with Firebase Admin
-            decoded = fb_auth.verify_id_token(id_token)
-        except Exception as e:
-            raise ValueError("Invalid Google ID token") from e
+        claims = await self.verifier.verify(id_token)  # raises ValueError if invalid
 
-        email = decoded.get("email")
-        name = decoded.get("name")
-        picture = decoded.get("picture")
-        firebase_uid = decoded["uid"]
-
+        email = (claims.get("email") or "").strip().lower()
         if not email:
             raise ValueError("Google account has no email")
+        if not claims.get("email_verified"):
+            raise ValueError("Google email is not verified")
 
-        # Find or create user in your DB
         user = await self.user_repo.get_by_email(email)
-        if not user:
+        if user is None:
             user = await self.user_repo.create(
-                email=email,
-                full_name=name,
-                avatar_url=picture,
-                provider="google",
-                provider_id=firebase_uid,
-                # no password
+                User(
+                    id=uuid4(),
+                    email=email,
+                    full_name=(claims.get("name") or email.split("@")[0]).strip(),
+                    hashed_password=None,
+                )
             )
-        else:
-            # Optional: update avatar / name if changed
-            pass
-
-        # Issue your own access + refresh tokens
-        access_token, refresh_token = await self.token_service.create_tokens(user)
+        if not user.is_active:
+            raise ValueError("Account is inactive")
 
         return TokenResponse(
-            access_token=access_token,
-            refresh_token=refresh_token,
-            token_type="bearer",
-            # + any other fields you have
+            access_token=self.token_service.create_access_token(user.id),
+            refresh_token=self.token_service.create_refresh_token(user.id),
+            user_id=str(user.id),
+            email=user.email,
+            full_name=user.full_name,
         )
