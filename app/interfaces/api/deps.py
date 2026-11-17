@@ -13,6 +13,10 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from app.infrastructure.database.repositories.revoked_tokens_repository import SQLAlchemyRevokedTokenRepository
 from app.application.use_cases.auth.logout_user import LogoutUserUseCase
 from app.infrastructure.security.firebase_verifer import FirebaseTokenVerifier
+from app.infrastructure.database.repositories.medication_repository import SQLAlchemyMedicationRepository
+from app.infrastructure.database.repositories.dose_log_repository import SQLAlchemyDoseLogRepository
+from app.infrastructure.database.repositories.device_token_repository import SQLAlchemyDeviceTokenRepository
+from app.infrastructure.notifications.push_notifier import FCMPushNotifier
 
 bearer_scheme = HTTPBearer()
 optional_bearer = HTTPBearer(auto_error=False)
@@ -85,3 +89,18 @@ def get_google_login_use_case(
     verifier=Depends(get_firebase_verifier),
 ) -> GoogleLoginUseCase:
     return GoogleLoginUseCase(user_repo, token_service, verifier)
+
+def get_medication_repository(session: AsyncSession = Depends(get_db)):
+    return SQLAlchemyMedicationRepository(session)
+
+
+def get_dose_log_repository(session: AsyncSession = Depends(get_db)):
+    return SQLAlchemyDoseLogRepository(session)
+
+
+def get_device_token_repository(session: AsyncSession = Depends(get_db)):
+    return SQLAlchemyDeviceTokenRepository(session)
+
+
+def get_push_service() -> FCMPushNotifier:
+    return FCMPushNotifier()

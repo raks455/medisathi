@@ -26,27 +26,32 @@ def _load_service_account(raw: str) -> dict:
     return json.loads(decoded.decode("utf-8"))
 
 
+def ensure_firebase_initialized() -> None:
+    """Initialise the Firebase Admin SDK once (shared by Google login and FCM push)."""
+    if firebase_admin._apps:
+        return
+
+    if settings.FIREBASE_SERVICE_ACCOUNT_B64:
+        cred = credentials.Certificate(
+            _load_service_account(settings.FIREBASE_SERVICE_ACCOUNT_B64)
+        )
+    elif settings.FIREBASE_SERVICE_ACCOUNT_FILE:
+        cred = credentials.Certificate(settings.FIREBASE_SERVICE_ACCOUNT_FILE)
+    elif settings.FIREBASE_SERVICE_ACCOUNT_JSON:
+        cred = credentials.Certificate(
+            _load_service_account(settings.FIREBASE_SERVICE_ACCOUNT_JSON)
+        )
+    else:
+        raise RuntimeError(
+            "Set FIREBASE_SERVICE_ACCOUNT_B64, _FILE or _JSON"
+        )
+
+    firebase_admin.initialize_app(cred)
+
+
 class FirebaseTokenVerifier:
     def _ensure_initialized(self) -> None:
-        if firebase_admin._apps:
-            return
-
-        if settings.FIREBASE_SERVICE_ACCOUNT_B64:
-            cred = credentials.Certificate(
-                _load_service_account(settings.FIREBASE_SERVICE_ACCOUNT_B64)
-            )
-        elif settings.FIREBASE_SERVICE_ACCOUNT_FILE:
-            cred = credentials.Certificate(settings.FIREBASE_SERVICE_ACCOUNT_FILE)
-        elif settings.FIREBASE_SERVICE_ACCOUNT_JSON:
-            cred = credentials.Certificate(
-                _load_service_account(settings.FIREBASE_SERVICE_ACCOUNT_JSON)
-            )
-        else:
-            raise RuntimeError(
-                "Set FIREBASE_SERVICE_ACCOUNT_B64, _FILE or _JSON"
-            )
-
-        firebase_admin.initialize_app(cred)
+        ensure_firebase_initialized()
 
     async def verify(self, id_token: str) -> dict:
         try:
