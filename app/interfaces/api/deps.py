@@ -16,6 +16,7 @@ from app.infrastructure.security.firebase_verifer import FirebaseTokenVerifier
 from app.infrastructure.database.repositories.medication_repository import SQLAlchemyMedicationRepository
 from app.infrastructure.database.repositories.dose_log_repository import SQLAlchemyDoseLogRepository
 from app.infrastructure.database.repositories.device_token_repository import SQLAlchemyDeviceTokenRepository
+from app.infrastructure.database.repositories.notification_repository import SQLAlchemyNotificationRepository
 from app.infrastructure.notifications.push_notifier import FCMPushNotifier
 
 bearer_scheme = HTTPBearer()
@@ -104,3 +105,7 @@ def get_device_token_repository(session: AsyncSession = Depends(get_db)):
 
 def get_push_service() -> FCMPushNotifier:
     return FCMPushNotifier()
+
+
+def get_notification_repository(session: AsyncSession = Depends(get_db)):
+    return SQLAlchemyNotificationRepository(session)

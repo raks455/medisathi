@@ -24,6 +24,7 @@ class FCMPushNotifier(PushNotificationService):
         body: str,
         data: Optional[Dict[str, str]] = None,
         collapse_key: Optional[str] = None,
+        android_channel_id: Optional[str] = None,
     ) -> List[str]:
         if not tokens:
             return []
@@ -32,7 +33,10 @@ class FCMPushNotifier(PushNotificationService):
         invalid: List[str] = []
         for i in range(0, len(tokens), _BATCH_SIZE):
             batch = tokens[i : i + _BATCH_SIZE]
-            message = self._build(batch, title, body, data or {}, collapse_key)
+            message = self._build(
+                batch, title, body, data or {}, collapse_key,
+                android_channel_id or settings.REMINDER_ANDROID_CHANNEL_ID,
+            )
             response = await asyncio.to_thread(messaging.send_each_for_multicast, message)
             for token, result in zip(batch, response.responses):
                 if result.success:
@@ -50,6 +54,7 @@ class FCMPushNotifier(PushNotificationService):
         body: str,
         data: Dict[str, str],
         collapse_key: Optional[str],
+        android_channel_id: str,
     ) -> messaging.MulticastMessage:
         android = messaging.AndroidConfig(
             priority="high",
@@ -58,7 +63,7 @@ class FCMPushNotifier(PushNotificationService):
                 # Same tag as the app's local notification -> Android replaces it
                 # instead of showing a duplicate.
                 tag=collapse_key,
-                channel_id=settings.REMINDER_ANDROID_CHANNEL_ID,
+                channel_id=android_channel_id,
                 sound="default",
             ),
         )

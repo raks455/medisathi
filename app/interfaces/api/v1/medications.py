@@ -13,9 +13,11 @@ from app.application.use_cases.medication.manage_medications import (
     DeleteMedicationUseCase,
     GetMedicationUseCase,
     ListMedicationsUseCase,
+    ResumeMedicationUseCase,
+    StopMedicationUseCase,
     UpdateMedicationUseCase,
 )
-from app.domain.value_objects.medication_enums import IntakeTiming, MedicineType
+from app.domain.value_objects.medication_enums import AlertStyle, IntakeTiming, MedicineType
 from app.interfaces.api.deps import get_current_user, get_medication_repository
 
 router = APIRouter(prefix="/medications", tags=["Medications"])
@@ -30,6 +32,7 @@ async def get_options():
     return {
         "medicine_types": [t.value for t in MedicineType],
         "intake_timings": [t.value for t in IntakeTiming],
+        "alert_styles": [s.value for s in AlertStyle],
     }
 
 
@@ -44,7 +47,8 @@ async def create_medication(
     current_user=Depends(get_current_user),
     repo=Depends(get_medication_repository),
 ):
-    return await CreateMedicationUseCase(repo).execute(current_user.id, data)
+    med = await CreateMedicationUseCase(repo).execute(current_user.id, data)
+    return MedicationResponse.from_entity(med)
 
 
 @router.get("", response_model=List[MedicationResponse], summary="List my medicines")
@@ -52,7 +56,8 @@ async def list_medications(
     current_user=Depends(get_current_user),
     repo=Depends(get_medication_repository),
 ):
-    return await ListMedicationsUseCase(repo).execute(current_user.id)
+    meds = await ListMedicationsUseCase(repo).execute(current_user.id)
+    return [MedicationResponse.from_entity(m) for m in meds]
 
 
 @router.get("/{medication_id}", response_model=MedicationResponse, summary="Get one medicine")
@@ -62,9 +67,10 @@ async def get_medication(
     repo=Depends(get_medication_repository),
 ):
     try:
-        return await GetMedicationUseCase(repo).execute(current_user.id, medication_id)
+        med = await GetMedicationUseCase(repo).execute(current_user.id, medication_id)
     except LookupError as e:
         raise _not_found(e)
+    return MedicationResponse.from_entity(med)
 
 
 @router.patch("/{medication_id}", response_model=MedicationResponse, summary="Edit a medicine")
@@ -75,11 +81,46 @@ async def update_medication(
     repo=Depends(get_medication_repository),
 ):
     try:
-        return await UpdateMedicationUseCase(repo).execute(current_user.id, medication_id, data)
+        med = await UpdateMedicationUseCase(repo).execute(current_user.id, medication_id, data)
     except LookupError as e:
         raise _not_found(e)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    return MedicationResponse.from_entity(med)
+
+
+@router.post(
+    "/{medication_id}/stop",
+    response_model=MedicationResponse,
+    summary="Stop a medicine (no more doses or reminders; history is kept)",
+)
+async def stop_medication(
+    medication_id: UUID,
+    current_user=Depends(get_current_user),
+    repo=Depends(get_medication_repository),
+):
+    try:
+        med = await StopMedicationUseCase(repo).execute(current_user.id, medication_id)
+    except LookupError as e:
+        raise _not_found(e)
+    return MedicationResponse.from_entity(med)
+
+
+@router.post(
+    "/{medication_id}/resume",
+    response_model=MedicationResponse,
+    summary="Start a stopped medicine again",
+)
+async def resume_medication(
+    medication_id: UUID,
+    current_user=Depends(get_current_user),
+    repo=Depends(get_medication_repository),
+):
+    try:
+        med = await ResumeMedicationUseCase(repo).execute(current_user.id, medication_id)
+    except LookupError as e:
+        raise _not_found(e)
+    return MedicationResponse.from_entity(med)
 
 
 @router.delete(

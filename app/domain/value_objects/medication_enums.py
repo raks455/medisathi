@@ -41,3 +41,16 @@ class DoseViewStatus(str, Enum):
     MISSED = "missed"
     TAKEN = "taken"
     SKIPPED = "skipped"
+
+
+class AlertStyle(str, Enum):
+    """How a dose reminder should alert the user on the phone."""
+    NOTIFICATION = "notification"   # normal notification sound
+    ALARM = "alarm"                 # alarm sound at alarm volume, stronger vibration
+
+
+class NotificationType(str, Enum):
+    """Kinds of entries in the in-app notification list."""
+    MEDICATION_REMINDER = "medication_reminder"
+    REFILL_REMINDER = "refill_reminder"
+    TEST = "test"

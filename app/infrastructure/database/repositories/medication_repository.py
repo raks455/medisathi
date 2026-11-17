@@ -1,14 +1,17 @@
-from datetime import time
+from datetime import datetime, time
 from typing import List, Optional
 from uuid import UUID
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.domain.entities.medication import Medication, MedicationSchedule
+from app.domain.entities.medication import (
+    Medication, MedicationInventory, MedicationSchedule, PausedPeriod,
+)
 from app.domain.repositories.medication_respository import MedicationRepository
-from app.domain.value_objects.medication_enums import IntakeTiming, MedicineType
+from app.domain.value_objects.medication_enums import AlertStyle, IntakeTiming, MedicineType
 from app.infrastructure.database.models.medication import (
+    MedicationInventoryModel,
     MedicationModel,
     MedicationScheduleModel,
 )
@@ -27,7 +30,9 @@ class SQLAlchemyMedicationRepository(MedicationRepository):
             dose=medication.dose,
             intake_timing=medication.intake_timing.value,
             instructions=medication.instructions,
+            paused_periods=self._pauses_to_json(medication.paused_periods),
             schedule=self._schedule_to_model(medication.schedule),
+            inventory=self._inventory_to_model(medication.inventory),
         )
         self.session.add(model)
         await self.session.commit()
@@ -42,6 +47,8 @@ class SQLAlchemyMedicationRepository(MedicationRepository):
             select(MedicationModel)
             .where(MedicationModel.user_id == user_id)
             .order_by(MedicationModel.created_at.desc())
+            # Stock changes through adjust_inventory(), outside the ORM.
+            .execution_options(populate_existing=True)
         )
         return [self._to_entity(m) for m in result.scalars().all()]
 
@@ -50,6 +57,15 @@ class SQLAlchemyMedicationRepository(MedicationRepository):
             select(MedicationModel)
             .join(MedicationScheduleModel)
             .where(MedicationScheduleModel.reminders_enabled.is_(True))
+        )
+        return [self._to_entity(m) for m in result.scalars().all()]
+
+    async def list_with_refill_reminders(self) -> List[Medication]:
+        result = await self.session.execute(
+            select(MedicationModel)
+            .join(MedicationScheduleModel)
+            .join(MedicationInventoryModel)
+            .where(MedicationInventoryModel.refill_reminder_enabled.is_(True))
         )
         return [self._to_entity(m) for m in result.scalars().all()]
 
@@ -62,6 +78,7 @@ class SQLAlchemyMedicationRepository(MedicationRepository):
         model.dose = medication.dose
         model.intake_timing = medication.intake_timing.value
         model.instructions = medication.instructions
+        model.paused_periods = self._pauses_to_json(medication.paused_periods)
 
         new_schedule = medication.schedule
         if new_schedule is None:
@@ -70,6 +87,14 @@ class SQLAlchemyMedicationRepository(MedicationRepository):
             model.schedule = self._schedule_to_model(new_schedule)
         else:
             self._copy_schedule(new_schedule, model.schedule)
+
+        new_inventory = medication.inventory
+        if new_inventory is None:
+            model.inventory = None
+        elif model.inventory is None:
+            model.inventory = self._inventory_to_model(new_inventory)
+        else:
+            self._copy_inventory(new_inventory, model.inventory)
 
         await self.session.commit()
         return await self.get_by_id(medication.id, medication.user_id)
@@ -80,6 +105,27 @@ class SQLAlchemyMedicationRepository(MedicationRepository):
                 MedicationModel.id == medication_id,
                 MedicationModel.user_id == user_id,
             )
+        )
+        await self.session.commit()
+        return result.rowcount > 0
+
+    async def adjust_inventory(self, medication_id: UUID, delta: float) -> None:
+        # One UPDATE so two doses marked at the same moment both count.
+        await self.session.execute(
+            update(MedicationInventoryModel)
+            .where(MedicationInventoryModel.medication_id == medication_id)
+            .values(quantity=func.greatest(0, MedicationInventoryModel.quantity + delta))
+        )
+        await self.session.commit()
+
+    async def claim_refill_alert(self, medication_id: UUID, stage: str) -> bool:
+        result = await self.session.execute(
+            update(MedicationInventoryModel)
+            .where(
+                MedicationInventoryModel.medication_id == medication_id,
+                MedicationInventoryModel.alert_stage.is_distinct_from(stage),
+            )
+            .values(alert_stage=stage)
         )
         await self.session.commit()
         return result.rowcount > 0
@@ -105,6 +151,7 @@ class SQLAlchemyMedicationRepository(MedicationRepository):
         model.start_date = s.start_date
         model.end_date = s.end_date
         model.reminders_enabled = s.reminders_enabled
+        model.alert_style = AlertStyle(s.alert_style).value
 
     def _schedule_to_model(self, s: Optional[MedicationSchedule]) -> Optional[MedicationScheduleModel]:
         if s is None:
@@ -124,7 +171,58 @@ class SQLAlchemyMedicationRepository(MedicationRepository):
             start_date=m.start_date,
             end_date=m.end_date,
             reminders_enabled=m.reminders_enabled,
+            alert_style=AlertStyle(m.alert_style or AlertStyle.NOTIFICATION.value),
         )
+
+    @staticmethod
+    def _copy_inventory(inv: MedicationInventory, model: MedicationInventoryModel) -> None:
+        model.quantity = inv.quantity
+        model.units_per_dose = inv.units_per_dose
+        model.refill_reminder_enabled = inv.refill_reminder_enabled
+        model.remind_days_before = inv.remind_days_before
+        model.alert_stage = inv.alert_stage
+
+    def _inventory_to_model(
+        self, inv: Optional[MedicationInventory]
+    ) -> Optional[MedicationInventoryModel]:
+        if inv is None:
+            return None
+        model = MedicationInventoryModel()
+        self._copy_inventory(inv, model)
+        return model
+
+    @staticmethod
+    def _inventory_to_entity(
+        m: Optional[MedicationInventoryModel],
+    ) -> Optional[MedicationInventory]:
+        if m is None:
+            return None
+        return MedicationInventory(
+            quantity=m.quantity,
+            units_per_dose=m.units_per_dose,
+            refill_reminder_enabled=m.refill_reminder_enabled,
+            remind_days_before=m.remind_days_before,
+            alert_stage=m.alert_stage,
+        )
+
+    @staticmethod
+    def _pauses_to_json(periods: List[PausedPeriod]) -> Optional[list]:
+        if not periods:
+            return None
+        return [
+            {"since": p.since.isoformat(), "until": p.until.isoformat() if p.until else None}
+            for p in periods
+        ]
+
+    @staticmethod
+    def _pauses_to_entity(raw: Optional[list]) -> List[PausedPeriod]:
+        return [
+            PausedPeriod(
+                since=datetime.fromisoformat(p["since"]),
+                until=datetime.fromisoformat(p["until"]) if p.get("until") else None,
+            )
+            for p in (raw or [])
+        ]
 
     def _to_entity(self, model: MedicationModel) -> Medication:
         return Medication(
@@ -136,6 +234,8 @@ class SQLAlchemyMedicationRepository(MedicationRepository):
             intake_timing=IntakeTiming(model.intake_timing),
             instructions=model.instructions,
             schedule=self._schedule_to_entity(model.schedule),
+            inventory=self._inventory_to_entity(model.inventory),
+            paused_periods=self._pauses_to_entity(model.paused_periods),
             created_at=model.created_at,
             updated_at=model.updated_at,
         )

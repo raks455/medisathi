@@ -67,6 +67,18 @@ class SQLAlchemyDoseLogRepository(DoseLogRepository):
         await self.session.commit()
         return claimed
 
+    async def get(self, medication_id: UUID, scheduled_for: datetime) -> Optional[DoseLog]:
+        result = await self.session.execute(
+            select(DoseLogModel)
+            .where(
+                DoseLogModel.medication_id == medication_id,
+                DoseLogModel.scheduled_for == scheduled_for,
+            )
+            .execution_options(populate_existing=True)
+        )
+        model = result.scalar_one_or_none()
+        return self._to_entity(model) if model else None
+
     async def list_for_user(
         self,
         user_id: UUID,

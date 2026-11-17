@@ -12,13 +12,19 @@ from app.infrastructure.scheduler.reminder_scheduler import reminder_loop
 from app.config import settings
 from app.infrastructure.database.models.revoked_token import RevokedTokenModel  # noqa
 from app.infrastructure.database.models.user import UserModel  # noqa
-from app.infrastructure.database.models.medication import MedicationModel, MedicationScheduleModel, DoseLogModel  # noqa
+from app.infrastructure.database.models.medication import (  # noqa
+    MedicationModel, MedicationScheduleModel, MedicationInventoryModel, DoseLogModel,
+)
 from app.infrastructure.database.models.device_token import DeviceTokenModel  # noqa
+from app.infrastructure.database.models.notification import NotificationModel  # noqa
+from app.infrastructure.database.migrations import run_startup_migrations
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Create tables on startup (for development only)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # Columns added to tables that already existed (create_all skips those).
+        await run_startup_migrations(conn)
 
     reminder_task = None
     if settings.REMINDER_SCHEDULER_ENABLED:

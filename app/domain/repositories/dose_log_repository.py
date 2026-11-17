@@ -35,3 +35,7 @@ class DoseLogRepository(ABC):
         medication_id: Optional[UUID] = None,
     ) -> List[DoseLog]:
         pass
+
+    @abstractmethod
+    async def get(self, medication_id: UUID, scheduled_for: datetime) -> Optional[DoseLog]:
+        pass

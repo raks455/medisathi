@@ -2,7 +2,8 @@ import uuid
 from datetime import date, datetime
 
 from sqlalchemy import (
-    JSON, Boolean, Date, DateTime, ForeignKey, String, Text, UniqueConstraint, func,
+    JSON, Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text,
+    UniqueConstraint, func,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -29,6 +30,9 @@ class MedicationModel(Base):
     dose: Mapped[str] = mapped_column(String(100), nullable=False)
     intake_timing: Mapped[str] = mapped_column(String(30), nullable=False)
     instructions: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # [{"since": iso, "until": iso | null}] - spans in which the medicine was
+    # stopped. Added by run_startup_migrations() on existing databases.
+    paused_periods: Mapped[list | None] = mapped_column(JSON, nullable=True)
 
     created_at: Mapped[DateTime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -38,6 +42,13 @@ class MedicationModel(Base):
     )
 
     schedule: Mapped["MedicationScheduleModel | None"] = relationship(
+        back_populates="medication",
+        uselist=False,
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        lazy="selectin",
+    )
+    inventory: Mapped["MedicationInventoryModel | None"] = relationship(
         back_populates="medication",
         uselist=False,
         cascade="all, delete-orphan",
@@ -61,8 +72,31 @@ class MedicationScheduleModel(Base):
     start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     reminders_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # Added by run_startup_migrations() on existing databases.
+    alert_style: Mapped[str] = mapped_column(
+        String(20), default="notification", server_default="notification", nullable=False
+    )
 
     medication: Mapped[MedicationModel] = relationship(back_populates="schedule")
+
+
+class MedicationInventoryModel(Base):
+    """Stock of a medicine; its own table so `medications` needs no ALTER."""
+    __tablename__ = "medication_inventories"
+
+    medication_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("medications.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    quantity: Mapped[float] = mapped_column(Float, nullable=False)
+    units_per_dose: Mapped[float] = mapped_column(Float, default=1.0, nullable=False)
+    refill_reminder_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    remind_days_before: Mapped[int] = mapped_column(Integer, default=3, nullable=False)
+    # Refill alert already sent for the current stock: null, "early" or "final".
+    alert_stage: Mapped[str | None] = mapped_column(String(10), nullable=True)
+
+    medication: Mapped[MedicationModel] = relationship(back_populates="inventory")
 
 
 class DoseLogModel(Base):

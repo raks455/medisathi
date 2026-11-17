@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     REMINDER_LOOKBACK_MINUTES: int = 15          # still send a push this late (e.g. after a restart)
     REMINDER_PUSH_DELAY_MINUTES: int = 0         # >0 turns the push into a "you haven't taken it yet" nudge
     REMINDER_ANDROID_CHANNEL_ID: str = "medication_reminders"
+    ALARM_ANDROID_CHANNEL_ID: str = "medication_alarms"     # doses with alert_style "alarm"
+    REFILL_REMINDER_HOUR: int = 9                # local hour from which refill reminders are sent
     DOSE_MISSED_AFTER_MINUTES: int = 60          # an unanswered dose counts as missed after this
 
     class Config:

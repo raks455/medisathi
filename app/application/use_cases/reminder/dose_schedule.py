@@ -65,6 +65,9 @@ class GetDoseScheduleUseCase:
                     log = logs.get((med.id, when))
                     if added_at and when < added_at and not log:
                         continue
+                    # No dose is expected while the medicine is stopped.
+                    if med.was_paused_at(when) and not log:
+                        continue
                     local = when.astimezone(tz)
                     doses.append(
                         ScheduledDose(
@@ -139,9 +142,19 @@ class LogDoseUseCase:
         if not is_scheduled_slot(med.schedule, when):
             raise ValueError("scheduled_for does not match a scheduled dose of this medication")
 
-        log = await self.dose_repo.upsert_status(
-            user_id, med.id, when, DoseStatus(data.status)
-        )
+        new_status = DoseStatus(data.status)
+        previous = await self.dose_repo.get(med.id, when)
+        log = await self.dose_repo.upsert_status(user_id, med.id, when, new_status)
+
+        # Keep the stock in step: taking a dose uses it up, and changing a
+        # "taken" answer to "skipped" puts it back.
+        if med.inventory:
+            was_taken = previous is not None and previous.status == DoseStatus.TAKEN
+            is_taken = new_status == DoseStatus.TAKEN
+            if is_taken and not was_taken:
+                await self.med_repo.adjust_inventory(med.id, -med.inventory.units_per_dose)
+            elif was_taken and not is_taken:
+                await self.med_repo.adjust_inventory(med.id, med.inventory.units_per_dose)
         return DoseLogResponse(
             id=log.id,
             dose_key=dose_key(med.id, log.scheduled_for),
