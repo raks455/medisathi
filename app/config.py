@@ -6,7 +6,13 @@ class Settings(BaseSettings):
     SECRET_KEY: str
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
-    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    # How long someone stays signed in without opening the app. Every use
+    # of the app renews it, so only a phone left unused this long signs out.
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 60
+    # A refresh token that was just exchanged is accepted again for this
+    # long: the answer to the first exchange may never have reached the
+    # phone (bad network), and it must not be signed out for that.
+    REFRESH_REUSE_GRACE_SECONDS: int = 120
     FIREBASE_SERVICE_ACCOUNT_B64: str | None = None
     FIREBASE_SERVICE_ACCOUNT_FILE: str | None = None   # local: path to the key file
     FIREBASE_SERVICE_ACCOUNT_JSON: str | None = None   # Render: the whole JSON as an env var

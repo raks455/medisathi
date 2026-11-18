@@ -1,4 +1,5 @@
 from fastapi import Depends,HTTPException, status
+from app.config import settings
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.infrastructure.database.session import get_db
 from app.infrastructure.database.repositories.user_repository import SQLAlchemyUserRepository
@@ -53,7 +54,10 @@ def get_refresh_use_case(
     token_service=Depends(get_token_service),
     revoked_repo=Depends(get_revoked_repository),
 ) -> RefreshTokenUseCase:
-    return RefreshTokenUseCase(user_repo, token_service, revoked_repo)
+    return RefreshTokenUseCase(
+        user_repo, token_service, revoked_repo,
+        reuse_grace_seconds=settings.REFRESH_REUSE_GRACE_SECONDS,
+    )
 
 def get_logout_use_case(
     token_service=Depends(get_token_service),

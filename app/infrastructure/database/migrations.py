@@ -15,6 +15,7 @@ _STATEMENTS = [
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS language "
     "VARCHAR(5) NOT NULL DEFAULT 'en'",
     "ALTER TABLE medications ADD COLUMN IF NOT EXISTS photo_version VARCHAR(20)",
+    "ALTER TABLE revoked_tokens ADD COLUMN IF NOT EXISTS rotated_at TIMESTAMPTZ",
 ]
 
 
