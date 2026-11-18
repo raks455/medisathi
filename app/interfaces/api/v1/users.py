@@ -1,9 +1,11 @@
 """The signed-in user's profile: name and personal health details."""
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response, status
 
-from app.application.dto.health_dto import ProfileResponse, ProfileUpdateRequest
+from app.application.dto.health_dto import (
+    LanguageRequest, ProfileResponse, ProfileUpdateRequest,
+)
 from app.domain.entities.user_profile import UserProfile
 from app.interfaces.api.deps import (
     get_current_user, get_user_profile_repository, get_user_repository,
@@ -23,6 +25,7 @@ def _response(user, full_name: str, profile: UserProfile) -> ProfileResponse:
         blood_group=profile.blood_group,
         conditions=profile.conditions,
         allergies=profile.allergies,
+        language=user.language,
     )
 
 
@@ -53,3 +56,15 @@ async def update_profile(
         allergies=data.allergies,
     ))
     return _response(current_user, data.full_name, profile)
+
+
+@router.put("/language", status_code=status.HTTP_204_NO_CONTENT,
+            summary="Language of my reminders and notifications (en or ne)")
+async def set_language(
+    data: LanguageRequest,
+    current_user=Depends(get_current_user),
+    user_repo=Depends(get_user_repository),
+):
+    if data.language != current_user.language:
+        await user_repo.set_language(current_user.id, data.language)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

@@ -51,6 +51,8 @@ class Medication:
     schedule: Optional[MedicationSchedule] = None
     inventory: Optional[MedicationInventory] = None
     paused_periods: List[PausedPeriod] = field(default_factory=list)
+    # Changes every time the user's photo of the medicine does; None = no photo.
+    photo_version: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 

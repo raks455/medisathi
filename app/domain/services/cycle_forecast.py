@@ -9,6 +9,8 @@ from datetime import date, timedelta
 from statistics import mean
 from typing import List, Optional, Sequence
 
+from app.domain.services import notification_texts as texts
+
 DEFAULT_CYCLE_LENGTH = 28
 DEFAULT_PERIOD_LENGTH = 5
 # Gaps outside this range are treated as missed logs, not real cycles.
@@ -135,7 +137,8 @@ class CycleReminder:
 
 def due_reminder(f: CycleForecast, today: date, remind_days_before: int,
                  period_reminders: bool = True,
-                 fertile_reminders: bool = False) -> Optional[CycleReminder]:
+                 fertile_reminders: bool = False,
+                 lang: str = "en") -> Optional[CycleReminder]:
     """The cycle reminder to send today, if any.
 
     Period: once a few days before, once on the expected day, and once when
@@ -151,32 +154,16 @@ def due_reminder(f: CycleForecast, today: date, remind_days_before: int,
 
     if period_reminders:
         if 1 <= days <= remind_days_before:
-            when = "tomorrow" if days == 1 else f"in {days} days"
-            return CycleReminder(
-                f"period:{start}:soon",
-                "Your period is coming",
-                f"Your next period is expected {when}. Keep pads or tampons handy.",
-            )
+            return CycleReminder(f"period:{start}:soon", *texts.period_soon(days, lang))
         if days == 0:
-            return CycleReminder(
-                f"period:{start}:due",
-                "Your period may start today",
-                "Log it in MediSathi when it starts to keep predictions accurate.",
-            )
+            return CycleReminder(f"period:{start}:due", *texts.period_due(lang))
         if days == -3:
-            return CycleReminder(
-                f"period:{start}:late",
-                "Your period is 3 days late",
-                "Cycles can vary. Log your period when it starts, and talk to a "
-                "doctor if you are worried.",
-            )
+            return CycleReminder(f"period:{start}:late", *texts.period_late(lang))
     if fertile_reminders:
         current = next((w for w in f.windows if not w.predicted), None)
         if current is not None and today == current.fertile_start:
             return CycleReminder(
                 f"fertile:{current.fertile_start.isoformat()}",
-                "Your fertile window starts today",
-                f"Ovulation is expected around "
-                f"{current.ovulation_date.strftime('%b %d').replace(' 0', ' ')}.",
+                *texts.fertile_start(current.ovulation_date, lang),
             )
     return None

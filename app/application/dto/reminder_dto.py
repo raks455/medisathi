@@ -23,6 +23,7 @@ class ScheduledDose(BaseModel):
     timezone: str
     status: DoseViewStatus
     responded_at: Optional[datetime] = None
+    photo_url: Optional[str] = Field(None, description="The user's photo of the medicine")
 
 
 class AdherenceSummary(BaseModel):

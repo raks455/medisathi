@@ -10,6 +10,7 @@ from pydantic import (
 from app.domain.entities.medication import Medication, MedicationInventory, MedicationSchedule
 from app.domain.services.inventory_forecast import forecast_stock, is_low_stock
 from app.domain.value_objects.medication_enums import AlertStyle, IntakeTiming, MedicineType
+from app.infrastructure.security.photo_links import medicine_photo_url
 
 
 def _strip(value):
@@ -176,6 +177,9 @@ class MedicationResponse(BaseModel):
     inventory: Optional[InventoryResponse] = None
     is_stopped: bool = False
     stopped_at: Optional[datetime] = None
+    photo_url: Optional[str] = Field(
+        None, description="The user's photo of the medicine. Opens without a token; "
+                          "changes whenever the photo does")
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
@@ -206,6 +210,7 @@ class MedicationResponse(BaseModel):
             inventory=inventory,
             is_stopped=med.is_stopped,
             stopped_at=med.stopped_at,
+            photo_url=medicine_photo_url(med),
             created_at=med.created_at,
             updated_at=med.updated_at,
         )

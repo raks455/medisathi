@@ -25,6 +25,7 @@ class FCMPushNotifier(PushNotificationService):
         data: Optional[Dict[str, str]] = None,
         collapse_key: Optional[str] = None,
         android_channel_id: Optional[str] = None,
+        image_url: Optional[str] = None,
     ) -> List[str]:
         if not tokens:
             return []
@@ -36,6 +37,7 @@ class FCMPushNotifier(PushNotificationService):
             message = self._build(
                 batch, title, body, data or {}, collapse_key,
                 android_channel_id or settings.REMINDER_ANDROID_CHANNEL_ID,
+                image_url,
             )
             response = await asyncio.to_thread(messaging.send_each_for_multicast, message)
             for token, result in zip(batch, response.responses):
@@ -55,6 +57,7 @@ class FCMPushNotifier(PushNotificationService):
         data: Dict[str, str],
         collapse_key: Optional[str],
         android_channel_id: str,
+        image_url: Optional[str] = None,
     ) -> messaging.MulticastMessage:
         android = messaging.AndroidConfig(
             priority="high",
@@ -65,6 +68,7 @@ class FCMPushNotifier(PushNotificationService):
                 tag=collapse_key,
                 channel_id=android_channel_id,
                 sound="default",
+                image=image_url,
             ),
         )
         apns_headers = {"apns-priority": "10"}
@@ -72,11 +76,15 @@ class FCMPushNotifier(PushNotificationService):
             apns_headers["apns-collapse-id"] = collapse_key[:64]
         apns = messaging.APNSConfig(
             headers=apns_headers,
-            payload=messaging.APNSPayload(aps=messaging.Aps(sound="default")),
+            payload=messaging.APNSPayload(
+                # mutable-content lets iOS attach the picture.
+                aps=messaging.Aps(sound="default", mutable_content=bool(image_url) or None)
+            ),
+            fcm_options=messaging.APNSFCMOptions(image=image_url) if image_url else None,
         )
         return messaging.MulticastMessage(
             tokens=tokens,
-            notification=messaging.Notification(title=title, body=body),
+            notification=messaging.Notification(title=title, body=body, image=image_url),
             data=data,
             android=android,
             apns=apns,

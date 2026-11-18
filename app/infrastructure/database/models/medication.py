@@ -2,7 +2,7 @@ import uuid
 from datetime import date, datetime
 
 from sqlalchemy import (
-    JSON, Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text,
+    JSON, Boolean, Date, DateTime, Float, ForeignKey, Integer, LargeBinary, String, Text,
     UniqueConstraint, func,
 )
 from sqlalchemy.dialects.postgresql import UUID
@@ -33,6 +33,9 @@ class MedicationModel(Base):
     # [{"since": iso, "until": iso | null}] - spans in which the medicine was
     # stopped. Added by run_startup_migrations() on existing databases.
     paused_periods: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # Set when a photo is stored in medication_photos; null = no photo.
+    # Added by run_startup_migrations() on existing databases.
+    photo_version: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     created_at: Mapped[DateTime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -118,3 +121,20 @@ class DoseLogModel(Base):
     status: Mapped[str] = mapped_column(String(20), nullable=False)
     responded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class MedicationPhotoModel(Base):
+    """The user's photo of a medicine (the strip, bottle or pill).
+
+    Kept apart from `medications` so listing medicines never loads the bytes,
+    and in Postgres because the app server's disk is not persistent.
+    """
+    __tablename__ = "medication_photos"
+
+    medication_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("medications.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    content_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    data: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)

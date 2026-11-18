@@ -20,7 +20,9 @@ from app.infrastructure.database.repositories.medication_repository import (
 from app.infrastructure.database.repositories.notification_repository import (
     SQLAlchemyNotificationRepository,
 )
+from app.infrastructure.database.repositories.user_repository import SQLAlchemyUserRepository
 from app.infrastructure.database.session import AsyncSessionLocal
+from app.infrastructure.security.photo_links import medicine_photo_url
 from app.infrastructure.notifications.push_notifier import FCMPushNotifier
 
 logger = logging.getLogger("uvicorn.error")
@@ -38,6 +40,15 @@ async def run_once() -> int:
         notification_repo = SQLAlchemyNotificationRepository(session)
         push = FCMPushNotifier()
 
+        # Each user's language, looked up once per run.
+        user_repo = SQLAlchemyUserRepository(session)
+        languages: dict = {}
+
+        async def language_of(user_id):
+            if user_id not in languages:
+                languages[user_id] = await user_repo.get_language(user_id)
+            return languages[user_id]
+
         doses = DispatchDueRemindersUseCase(
             med_repo=med_repo,
             dose_repo=SQLAlchemyDoseLogRepository(session),
@@ -47,6 +58,8 @@ async def run_once() -> int:
             push_delay_minutes=settings.REMINDER_PUSH_DELAY_MINUTES,
             lookback_minutes=settings.REMINDER_LOOKBACK_MINUTES,
             alarm_channel_id=settings.ALARM_ANDROID_CHANNEL_ID,
+            language_of=language_of,
+            photo_url_of=medicine_photo_url,
         )
         refills = DispatchRefillRemindersUseCase(
             med_repo=med_repo,
@@ -54,6 +67,7 @@ async def run_once() -> int:
             notification_repo=notification_repo,
             push=push,
             send_from_hour=settings.REFILL_REMINDER_HOUR,
+            language_of=language_of,
         )
         sent = await doses.execute() + await refills.execute()
 
@@ -66,6 +80,7 @@ async def run_once() -> int:
                 notification_repo=notification_repo,
                 push=push,
                 send_from_hour=settings.REFILL_REMINDER_HOUR,
+                language_of=language_of,
             ).execute()
         return sent
 

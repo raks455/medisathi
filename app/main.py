@@ -19,6 +19,7 @@ from app.infrastructure.database.models.revoked_token import RevokedTokenModel  
 from app.infrastructure.database.models.user import UserModel  # noqa
 from app.infrastructure.database.models.medication import (  # noqa
     MedicationModel, MedicationScheduleModel, MedicationInventoryModel, DoseLogModel,
+    MedicationPhotoModel,
 )
 from app.infrastructure.database.models.device_token import DeviceTokenModel  # noqa
 from app.infrastructure.database.models.notification import NotificationModel  # noqa

@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from app.application.dto.notification_dto import NotificationListResponse, NotificationResponse
 from app.application.dto.reminder_dto import RegisterDeviceRequest
 from app.domain.entities.notification import Notification
+from app.domain.services.notification_texts import test_text
 from app.domain.value_objects.medication_enums import NotificationType
 from app.interfaces.api.deps import (
     get_current_user, get_device_token_repository, get_notification_repository,
@@ -111,7 +112,7 @@ async def send_test_push(
     tokens = await repo.list_tokens(current_user.id)
     if not tokens:
         raise HTTPException(status_code=400, detail="No devices registered for this user")
-    title, body = "Medisathi test", "Push notifications are working"
+    title, body = test_text(current_user.language)
     try:
         invalid = await push.send(tokens, title, body, data={"type": "test"})
     except Exception as e:

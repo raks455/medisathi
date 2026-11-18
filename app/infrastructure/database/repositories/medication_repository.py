@@ -1,5 +1,5 @@
-from datetime import datetime, time
-from typing import List, Optional
+from datetime import datetime, time, timezone
+from typing import List, Optional, Tuple
 from uuid import UUID
 
 from sqlalchemy import delete, func, select, update
@@ -13,6 +13,7 @@ from app.domain.value_objects.medication_enums import AlertStyle, IntakeTiming, 
 from app.infrastructure.database.models.medication import (
     MedicationInventoryModel,
     MedicationModel,
+    MedicationPhotoModel,
     MedicationScheduleModel,
 )
 
@@ -130,6 +131,44 @@ class SQLAlchemyMedicationRepository(MedicationRepository):
         await self.session.commit()
         return result.rowcount > 0
 
+    async def set_photo(self, medication_id: UUID, data: bytes, content_type: str) -> None:
+        photo = await self.session.get(MedicationPhotoModel, medication_id)
+        if photo is None:
+            photo = MedicationPhotoModel(medication_id=medication_id)
+            self.session.add(photo)
+        photo.data = data
+        photo.content_type = content_type
+        # Milliseconds since 1970: a new value for every upload.
+        version = str(int(datetime.now(timezone.utc).timestamp() * 1000))
+        await self.session.execute(
+            update(MedicationModel)
+            .where(MedicationModel.id == medication_id)
+            .values(photo_version=version)
+        )
+        await self.session.commit()
+
+    async def delete_photo(self, medication_id: UUID) -> None:
+        await self.session.execute(
+            delete(MedicationPhotoModel)
+            .where(MedicationPhotoModel.medication_id == medication_id)
+        )
+        await self.session.execute(
+            update(MedicationModel)
+            .where(MedicationModel.id == medication_id)
+            .values(photo_version=None)
+        )
+        await self.session.commit()
+
+    async def get_photo(self, medication_id: UUID, version: str) -> Optional[Tuple[bytes, str]]:
+        result = await self.session.execute(
+            select(MedicationPhotoModel.data, MedicationPhotoModel.content_type)
+            .join(MedicationModel, MedicationModel.id == MedicationPhotoModel.medication_id)
+            .where(MedicationModel.id == medication_id,
+                   MedicationModel.photo_version == version)
+        )
+        row = result.first()
+        return (row[0], row[1]) if row else None
+
     async def _get_model(self, medication_id: UUID, user_id: UUID) -> Optional[MedicationModel]:
         result = await self.session.execute(
             select(MedicationModel)
@@ -236,6 +275,7 @@ class SQLAlchemyMedicationRepository(MedicationRepository):
             schedule=self._schedule_to_entity(model.schedule),
             inventory=self._inventory_to_entity(model.inventory),
             paused_periods=self._pauses_to_entity(model.paused_periods),
+            photo_version=model.photo_version,
             created_at=model.created_at,
             updated_at=model.updated_at,
         )

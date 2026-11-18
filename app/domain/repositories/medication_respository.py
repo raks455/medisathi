@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from uuid import UUID
 
 from app.domain.entities.medication import Medication
@@ -54,5 +54,22 @@ class MedicationRepository(ABC):
 
         Returns True only for the first caller, so each alert is sent once
         even with several server instances.
+        """
+        pass
+
+    @abstractmethod
+    async def set_photo(self, medication_id: UUID, data: bytes, content_type: str) -> None:
+        """Store (or replace) the photo of a medicine."""
+        pass
+
+    @abstractmethod
+    async def delete_photo(self, medication_id: UUID) -> None:
+        pass
+
+    @abstractmethod
+    async def get_photo(self, medication_id: UUID, version: str) -> Optional[Tuple[bytes, str]]:
+        """(bytes, content type) of the photo, if `version` is the current one.
+
+        Not scoped to a user: the caller has checked the link's signature.
         """
         pass

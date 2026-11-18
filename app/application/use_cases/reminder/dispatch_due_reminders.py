@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Dict, Optional
+from typing import Awaitable, Callable, Dict, Optional
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
@@ -11,47 +11,24 @@ from app.domain.repositories.dose_log_repository import DoseLogRepository
 from app.domain.repositories.medication_respository import MedicationRepository
 from app.domain.repositories.notification_repository import NotificationRepository
 from app.domain.services.inventory_forecast import forecast_stock
+from app.domain.services.notification_texts import refill_text, reminder_text  # noqa: F401
 from app.domain.services.reminder_schedule import dose_key, occurrences_between
-from app.domain.value_objects.medication_enums import AlertStyle, IntakeTiming, NotificationType
+from app.domain.value_objects.medication_enums import AlertStyle, NotificationType
 
 logger = logging.getLogger("uvicorn.error")
 
-_TIMING_TEXT = {
-    IntakeTiming.BEFORE_FOOD: "before food",
-    IntakeTiming.AFTER_FOOD: "after food",
-    IntakeTiming.WITH_FOOD: "with food",
-    IntakeTiming.EMPTY_STOMACH: "on an empty stomach",
-    IntakeTiming.BEFORE_SLEEP: "before sleep",
-    IntakeTiming.ANYTIME: None,
-}
+# user id -> 'en' | 'ne'. None means everyone gets English.
+LanguageLookup = Callable[[UUID], Awaitable[str]]
 
 
-def reminder_text(med: Medication, delayed: bool) -> tuple[str, str]:
-    title = f"Did you take {med.name}?" if delayed else f"Time to take {med.name}"
-    parts = [f"{med.dose} ({med.medicine_type.value})"]
-    timing = _TIMING_TEXT.get(med.intake_timing)
-    if timing:
-        parts.append(timing)
-    body = " - ".join(parts)
-    if med.instructions:
-        body += f". {med.instructions}"
-    return title, body
-
-
-def _amount(value: float) -> str:
-    """30.0 -> '30', 2.5 -> '2.5'."""
-    return f"{value:g}"
-
-
-def refill_text(med: Medication, days_left: int, final: bool) -> tuple[str, str]:
-    left = f"{_amount(med.inventory.quantity)} left"
-    if final:
-        return (
-            f"{med.name} runs out today",
-            f"{left}. Refill now so you do not miss a dose.",
-        )
-    when = "tomorrow" if days_left == 1 else f"in {days_left} days"
-    return f"Refill {med.name} soon", f"{left} - it runs out {when}."
+async def _language(lookup: Optional[LanguageLookup], user_id: UUID) -> str:
+    if lookup is None:
+        return "en"
+    try:
+        return await lookup(user_id)
+    except Exception:
+        logger.exception("Could not read the language of user %s", user_id)
+        return "en"
 
 
 class _Notifier:
@@ -76,13 +53,18 @@ class _Notifier:
         data: Dict[str, str],
         collapse_key: str,
         android_channel_id: Optional[str] = None,
+        image_url: Optional[str] = None,
     ) -> None:
         # The in-app list is written first so the user can still see the
         # reminder there when the push fails or no phone is registered.
+        if image_url:
+            # In the data too: the app shows the picture itself when it is open.
+            data = {**data, "image": image_url}
         await self.notification_repo.add(user_id, type, title, body, data)
         tokens = await self.device_repo.list_tokens(user_id)
         if not tokens:
             return
+        extra = {"image_url": image_url} if image_url else {}
         invalid = await self.push.send(
             tokens,
             title,
@@ -90,6 +72,7 @@ class _Notifier:
             data={"type": type.value, **data},
             collapse_key=collapse_key,
             android_channel_id=android_channel_id,
+            **extra,
         )
         await self.device_repo.remove_tokens(invalid)
 
@@ -112,7 +95,11 @@ class DispatchDueRemindersUseCase:
         push_delay_minutes: int = 0,
         lookback_minutes: int = 15,
         alarm_channel_id: Optional[str] = None,
+        language_of: Optional[LanguageLookup] = None,
+        photo_url_of: Optional[Callable[[Medication], Optional[str]]] = None,
     ):
+        self.language_of = language_of
+        self.photo_url_of = photo_url_of
         self.med_repo = med_repo
         self.dose_repo = dose_repo
         self.notifier = _Notifier(device_repo, notification_repo, push)
@@ -139,7 +126,10 @@ class DispatchDueRemindersUseCase:
                 if not await self.dose_repo.claim_for_notification(med.user_id, med.id, when):
                     continue
                 key = dose_key(med.id, when)
-                title, body = reminder_text(med, delayed=self.delay > timedelta(0))
+                title, body = reminder_text(
+                    med, delayed=self.delay > timedelta(0),
+                    lang=await _language(self.language_of, med.user_id),
+                )
                 alarm = med.schedule.alert_style == AlertStyle.ALARM
                 try:
                     await self.notifier.notify(
@@ -155,6 +145,8 @@ class DispatchDueRemindersUseCase:
                         },
                         collapse_key=key,
                         android_channel_id=self.alarm_channel_id if alarm else None,
+                        # A photo of the medicine, for those who cannot read its name.
+                        image_url=self.photo_url_of(med) if self.photo_url_of else None,
                     )
                     sent += 1
                 except Exception:
@@ -178,10 +170,12 @@ class DispatchRefillRemindersUseCase:
         notification_repo: NotificationRepository,
         push: PushNotificationService,
         send_from_hour: int = 9,
+        language_of: Optional[LanguageLookup] = None,
     ):
         self.med_repo = med_repo
         self.notifier = _Notifier(device_repo, notification_repo, push)
         self.send_from_hour = send_from_hour
+        self.language_of = language_of
 
     async def execute(self, now: Optional[datetime] = None) -> int:
         now = now or datetime.now(timezone.utc)
@@ -207,7 +201,10 @@ class DispatchRefillRemindersUseCase:
             if not await self.med_repo.claim_refill_alert(med.id, stage):
                 continue
 
-            title, body = refill_text(med, forecast.days_left, final=stage == "final")
+            title, body = refill_text(
+                med, forecast.days_left, final=stage == "final",
+                lang=await _language(self.language_of, med.user_id),
+            )
             try:
                 await self.notifier.notify(
                     med.user_id,

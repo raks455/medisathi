@@ -13,6 +13,7 @@ from app.domain.services.reminder_schedule import (
     dose_key, is_scheduled_slot, occurrences_on_local_date,
 )
 from app.domain.value_objects.medication_enums import DoseStatus, DoseViewStatus
+from app.infrastructure.security.photo_links import medicine_photo_url
 
 MAX_RANGE_DAYS = 31
 
@@ -84,6 +85,7 @@ class GetDoseScheduleUseCase:
                             timezone=med.schedule.timezone,
                             status=self._status(when, log, now),
                             responded_at=log.responded_at if log else None,
+                            photo_url=medicine_photo_url(med),
                         )
                     )
                 day += timedelta(days=1)

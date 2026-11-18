@@ -43,6 +43,18 @@ class SQLAlchemyUserRepository(UserRepository):
         )
         await self.session.commit()
 
+    async def get_language(self, user_id: UUID) -> str:
+        result = await self.session.execute(
+            select(UserModel.language).where(UserModel.id == user_id)
+        )
+        return result.scalar_one_or_none() or "en"
+
+    async def set_language(self, user_id: UUID, language: str) -> None:
+        await self.session.execute(
+            update(UserModel).where(UserModel.id == user_id).values(language=language)
+        )
+        await self.session.commit()
+
     def _to_entity(self, model: UserModel) -> User:
         return User(
             id=model.id,
@@ -50,6 +62,7 @@ class SQLAlchemyUserRepository(UserRepository):
             full_name=model.full_name,
             hashed_password=model.hashed_password,
             is_active=model.is_active,
+            language=model.language or "en",
             created_at=model.created_at,
             updated_at=model.updated_at,
         )

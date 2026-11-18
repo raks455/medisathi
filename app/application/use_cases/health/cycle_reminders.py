@@ -5,7 +5,9 @@ from typing import Optional
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from app.application.interfaces.notification_service import PushNotificationService
-from app.application.use_cases.reminder.dispatch_due_reminders import _Notifier
+from app.application.use_cases.reminder.dispatch_due_reminders import (
+    LanguageLookup, _Notifier, _language,
+)
 from app.domain.repositories.device_token_repository import DeviceTokenRepository
 from app.domain.repositories.health_repositories import CycleRepository
 from app.domain.repositories.notification_repository import NotificationRepository
@@ -23,10 +25,12 @@ class DispatchCycleRemindersUseCase:
         notification_repo: NotificationRepository,
         push: PushNotificationService,
         send_from_hour: int = 9,
+        language_of: Optional[LanguageLookup] = None,
     ):
         self.cycle_repo = cycle_repo
         self.notifier = _Notifier(device_repo, notification_repo, push)
         self.send_from_hour = send_from_hour
+        self.language_of = language_of
 
     async def execute(self, now: Optional[datetime] = None) -> int:
         now = now or datetime.now(timezone.utc)
@@ -54,6 +58,7 @@ class DispatchCycleRemindersUseCase:
             reminder = cycle_forecast.due_reminder(
                 forecast, today, settings.remind_days_before,
                 settings.period_reminders, settings.fertile_reminders,
+                lang=await _language(self.language_of, settings.user_id),
             )
             if reminder is None or reminder.key == settings.alert_key:
                 continue

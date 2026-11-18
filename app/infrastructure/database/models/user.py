@@ -18,6 +18,11 @@ class UserModel(Base):
     hashed_password: Mapped[str | None] = mapped_column(String(255), nullable=True)
     
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Language of the notifications the server writes: 'en' or 'ne'.
+    # Added by run_startup_migrations() on existing databases.
+    language: Mapped[str] = mapped_column(
+        String(5), nullable=False, default="en", server_default="en"
+    )
     created_at: Mapped[DateTime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     REFILL_REMINDER_HOUR: int = 9                # local hour from which refill reminders are sent
     DOSE_MISSED_AFTER_MINUTES: int = 60          # an unanswered dose counts as missed after this
 
+    # Address phones reach this server at; used in links inside pushes
+    # (medicine photos).
+    PUBLIC_BASE_URL: str = "https://medisathi-c41p.onrender.com"
+    MEDICINE_PHOTO_MAX_MB: int = 3
+
     # Health records (files are stored in Postgres)
     HEALTH_RECORD_MAX_FILE_MB: int = 10
     HEALTH_RECORD_QUOTA_MB: int = 200            # per user, all folders together

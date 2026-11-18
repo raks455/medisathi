@@ -1,7 +1,7 @@
 from typing import List
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
 
 from app.application.dto.medication_dto import (
     MedicationCreateRequest,
@@ -18,6 +18,8 @@ from app.application.use_cases.medication.manage_medications import (
     UpdateMedicationUseCase,
 )
 from app.domain.value_objects.medication_enums import AlertStyle, IntakeTiming, MedicineType
+from app.config import settings
+from app.infrastructure.security.photo_links import is_valid_signature
 from app.interfaces.api.deps import get_current_user, get_medication_repository
 
 router = APIRouter(prefix="/medications", tags=["Medications"])
@@ -138,3 +140,87 @@ async def delete_medication(
     except LookupError as e:
         raise _not_found(e)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ---- photo of the medicine ----------------------------------------------
+
+_PHOTO_TYPES = {"image/jpeg", "image/png", "image/webp"}
+# What the file really is, whatever the upload claims.
+_PHOTO_SIGNATURES = {
+    b"\xff\xd8\xff": "image/jpeg",
+    b"\x89PNG\r\n\x1a\n": "image/png",
+}
+
+
+def _photo_type(data: bytes) -> str | None:
+    for magic, content_type in _PHOTO_SIGNATURES.items():
+        if data.startswith(magic):
+            return content_type
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    return None
+
+
+@router.put(
+    "/{medication_id}/photo",
+    response_model=MedicationResponse,
+    summary="Add or replace the photo of a medicine (JPEG, PNG or WebP)",
+)
+async def set_medication_photo(
+    medication_id: UUID,
+    file: UploadFile = File(...),
+    current_user=Depends(get_current_user),
+    repo=Depends(get_medication_repository),
+):
+    if await repo.get_by_id(medication_id, current_user.id) is None:
+        raise HTTPException(status_code=404, detail="Medication not found")
+    limit = settings.MEDICINE_PHOTO_MAX_MB * 1024 * 1024
+    data = await file.read(limit + 1)
+    if len(data) > limit:
+        raise HTTPException(
+            status_code=413,
+            detail=f"The photo is too large (max {settings.MEDICINE_PHOTO_MAX_MB} MB)")
+    content_type = _photo_type(data)
+    if content_type not in _PHOTO_TYPES:
+        raise HTTPException(status_code=400, detail="The photo must be a JPEG, PNG or WebP image")
+    await repo.set_photo(medication_id, data, content_type)
+    return MedicationResponse.from_entity(await repo.get_by_id(medication_id, current_user.id))
+
+
+@router.delete(
+    "/{medication_id}/photo",
+    response_model=MedicationResponse,
+    summary="Remove the photo of a medicine",
+)
+async def delete_medication_photo(
+    medication_id: UUID,
+    current_user=Depends(get_current_user),
+    repo=Depends(get_medication_repository),
+):
+    if await repo.get_by_id(medication_id, current_user.id) is None:
+        raise HTTPException(status_code=404, detail="Medication not found")
+    await repo.delete_photo(medication_id)
+    return MedicationResponse.from_entity(await repo.get_by_id(medication_id, current_user.id))
+
+
+@router.get(
+    "/{medication_id}/photo/{version}",
+    summary="The photo itself. No token: the signed link from `photo_url` is the key",
+    responses={200: {"content": {"image/jpeg": {}}}},
+)
+async def get_medication_photo(
+    medication_id: UUID,
+    version: str,
+    sig: str = Query(..., description="Signature from `photo_url`"),
+    repo=Depends(get_medication_repository),
+):
+    not_found = HTTPException(status_code=404, detail="Photo not found")
+    if not is_valid_signature(medication_id, version, sig):
+        raise not_found
+    photo = await repo.get_photo(medication_id, version)
+    if photo is None:
+        raise not_found
+    data, content_type = photo
+    # The link changes with the photo, so the picture can be cached for good.
+    return Response(content=data, media_type=content_type,
+                    headers={"Cache-Control": "private, max-age=31536000, immutable"})

@@ -10,5 +10,6 @@ class User:
     full_name: str
     hashed_password: str
     is_active: bool = True
+    language: str = "en"   # language of notifications: en | ne
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None

@@ -12,6 +12,9 @@ _STATEMENTS = [
     "ALTER TABLE medications ADD COLUMN IF NOT EXISTS paused_periods JSON",
     "ALTER TABLE medication_schedules ADD COLUMN IF NOT EXISTS alert_style "
     "VARCHAR(20) NOT NULL DEFAULT 'notification'",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS language "
+    "VARCHAR(5) NOT NULL DEFAULT 'en'",
+    "ALTER TABLE medications ADD COLUMN IF NOT EXISTS photo_version VARCHAR(20)",
 ]
 
 

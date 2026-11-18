@@ -1,7 +1,7 @@
 """Request / response schemas for health records, vitals, mood, cycle,
 pregnancy and feedback."""
 from datetime import date, datetime, timedelta, timezone
-from typing import Dict, List, Optional
+from typing import Dict, List, Literal, Optional
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -348,6 +348,11 @@ class ProfileUpdateRequest(BaseModel):
         return v
 
 
+class LanguageRequest(BaseModel):
+    language: Literal["en", "ne"] = Field(
+        ..., description="Language of reminders and other notifications")
+
+
 class ProfileResponse(BaseModel):
     user_id: UUID
     email: str
@@ -358,3 +363,4 @@ class ProfileResponse(BaseModel):
     blood_group: Optional[BloodGroup] = None
     conditions: List[str] = Field(default_factory=list)
     allergies: List[str] = Field(default_factory=list)
+    language: str = "en"
