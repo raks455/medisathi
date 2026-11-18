@@ -12,6 +12,7 @@ from app.interfaces.api.v1.health_records import router as health_records_router
 from app.interfaces.api.v1.wellness import moods_router, vitals_router
 from app.interfaces.api.v1.womens_health import cycles_router, pregnancy_router
 from app.interfaces.api.v1.feedback import router as feedback_router
+from app.interfaces.api.v1.users import router as profile_router
 from app.infrastructure.scheduler.reminder_scheduler import reminder_loop
 from app.config import settings
 from app.infrastructure.database.models.revoked_token import RevokedTokenModel  # noqa
@@ -59,6 +60,7 @@ app.include_router(moods_router, prefix="/api/v1")
 app.include_router(cycles_router, prefix="/api/v1")
 app.include_router(pregnancy_router, prefix="/api/v1")
 app.include_router(feedback_router, prefix="/api/v1")
+app.include_router(profile_router, prefix="/api/v1")
 @app.get("/")
 async def root():
     return {"message": "Medisathi API is running"}

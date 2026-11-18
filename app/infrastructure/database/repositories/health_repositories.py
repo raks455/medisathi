@@ -8,18 +8,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.entities.feedback import Feedback
 from app.domain.entities.health_record import HealthRecord
+from app.domain.entities.user_profile import UserProfile
 from app.domain.entities.wellness import MoodEntry, VitalReading
 from app.domain.entities.womens_health import CyclePeriod, CycleSettings, Pregnancy
 from app.domain.repositories.health_repositories import (
     CycleRepository, FeedbackRepository, HealthRecordRepository, MoodRepository,
-    PregnancyRepository, VitalRepository,
+    PregnancyRepository, UserProfileRepository, VitalRepository,
 )
 from app.domain.value_objects.health_enums import (
-    FeedbackTopic, Flow, Mood, RecordCategory, RecordFolder, VitalType,
+    BloodGroup, FeedbackTopic, Flow, Gender, Mood, RecordCategory, RecordFolder, VitalType,
 )
 from app.infrastructure.database.models.health import (
     CyclePeriodModel, CycleSettingsModel, FeedbackModel, HealthRecordFileModel, HealthRecordModel,
-    MoodEntryModel, PregnancyModel, VitalReadingModel,
+    MoodEntryModel, PregnancyModel, UserProfileModel, VitalReadingModel,
 )
 
 
@@ -178,6 +179,30 @@ class SQLAlchemyVitalRepository(VitalRepository):
     async def latest(self, user_id: UUID, type: VitalType) -> Optional[VitalReading]:
         rows = await self.list(user_id, type, limit=1)
         return rows[0] if rows else None
+
+    async def _get_model(self, user_id: UUID, reading_id: UUID) -> Optional[VitalReadingModel]:
+        result = await self.session.execute(
+            select(VitalReadingModel).where(
+                VitalReadingModel.id == reading_id, VitalReadingModel.user_id == user_id
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def get(self, user_id: UUID, reading_id: UUID) -> Optional[VitalReading]:
+        model = await self._get_model(user_id, reading_id)
+        return self._to_entity(model) if model else None
+
+    async def update(self, reading: VitalReading) -> VitalReading:
+        model = await self._get_model(reading.user_id, reading.id)
+        if model is None:
+            raise LookupError("Reading not found")
+        model.value = reading.value
+        model.value2 = reading.value2
+        model.pulse = reading.pulse
+        model.note = reading.note
+        model.recorded_at = reading.recorded_at
+        await self.session.commit()
+        return self._to_entity(model)
 
     async def delete(self, user_id: UUID, reading_id: UUID) -> bool:
         return await _delete(self.session, VitalReadingModel, user_id, reading_id)
@@ -428,4 +453,39 @@ class SQLAlchemyFeedbackRepository(FeedbackRepository):
             app_version=model.app_version,
             platform=model.platform,
             created_at=model.created_at,
+        )
+
+
+# ---- profile --------------------------------------------------------------
+
+class SQLAlchemyUserProfileRepository(UserProfileRepository):
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def get(self, user_id: UUID) -> UserProfile:
+        model = await self.session.get(UserProfileModel, user_id)
+        return self._to_entity(model) if model else UserProfile(user_id=user_id)
+
+    async def save(self, profile: UserProfile) -> UserProfile:
+        model = await self.session.get(UserProfileModel, profile.user_id)
+        if model is None:
+            model = UserProfileModel(user_id=profile.user_id)
+            self.session.add(model)
+        model.date_of_birth = profile.date_of_birth
+        model.gender = profile.gender.value if profile.gender else None
+        model.blood_group = profile.blood_group.value if profile.blood_group else None
+        model.conditions = list(profile.conditions)
+        model.allergies = list(profile.allergies)
+        await self.session.commit()
+        return self._to_entity(model)
+
+    @staticmethod
+    def _to_entity(m: UserProfileModel) -> UserProfile:
+        return UserProfile(
+            user_id=m.user_id,
+            date_of_birth=m.date_of_birth,
+            gender=Gender(m.gender) if m.gender else None,
+            blood_group=BloodGroup(m.blood_group) if m.blood_group else None,
+            conditions=list(m.conditions or []),
+            allergies=list(m.allergies or []),
         )

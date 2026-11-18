@@ -32,7 +32,7 @@ async def add_vital(
         id=uuid4(),
         user_id=current_user.id,
         type=data.type,
-        value=round(data.value, 1),
+        value=round(data.value, 2),
         value2=round(data.value2) if data.value2 is not None else None,
         pulse=data.pulse,
         note=data.note,
@@ -81,6 +81,27 @@ async def vitals_summary(
         if baseline:
             result.weight_change_30d = round(weight.value - baseline.value, 1)
     return result
+
+
+@vitals_router.put("/{reading_id}", response_model=VitalResponse,
+                   summary="Correct a reading (its type cannot change)")
+async def update_vital(
+    reading_id: UUID,
+    data: VitalCreateRequest,
+    current_user=Depends(get_current_user),
+    repo=Depends(get_vital_repository),
+):
+    reading = await repo.get(current_user.id, reading_id)
+    if reading is None:
+        raise HTTPException(status_code=404, detail="Reading not found")
+    if data.type != reading.type:
+        raise HTTPException(status_code=400, detail="The type of a reading cannot be changed")
+    reading.value = round(data.value, 2)
+    reading.value2 = round(data.value2) if data.value2 is not None else None
+    reading.pulse = data.pulse
+    reading.note = data.note
+    reading.recorded_at = data.recorded_at
+    return VitalResponse.from_entity(await repo.update(reading))
 
 
 @vitals_router.delete("/{reading_id}", status_code=status.HTTP_204_NO_CONTENT,

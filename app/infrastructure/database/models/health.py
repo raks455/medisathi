@@ -143,3 +143,19 @@ class CycleSettingsModel(Base):
     remind_days_before: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
     fertile_reminders: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     alert_key: Mapped[str | None] = mapped_column(String(60), nullable=True)
+
+
+class UserProfileModel(Base):
+    __tablename__ = "user_profiles"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    date_of_birth: Mapped[date | None] = mapped_column(Date, nullable=True)
+    gender: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    blood_group: Mapped[str | None] = mapped_column(String(5), nullable=True)
+    conditions: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    allergies: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now(), nullable=True
+    )

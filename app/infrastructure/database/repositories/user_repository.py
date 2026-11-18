@@ -1,7 +1,7 @@
 from typing import Optional
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, update
 from app.domain.entities.user import User
 from app.domain.repositories.user_repository import UserRepository
 from app.infrastructure.database.models.user import UserModel
@@ -36,6 +36,12 @@ class SQLAlchemyUserRepository(UserRepository):
         await self.session.commit()
         await self.session.refresh(model)
         return self._to_entity(model)
+
+    async def update_full_name(self, user_id: UUID, full_name: str) -> None:
+        await self.session.execute(
+            update(UserModel).where(UserModel.id == user_id).values(full_name=full_name)
+        )
+        await self.session.commit()
 
     def _to_entity(self, model: UserModel) -> User:
         return User(

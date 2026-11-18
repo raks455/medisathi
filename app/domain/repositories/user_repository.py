@@ -16,3 +16,7 @@ class UserRepository(ABC):
     @abstractmethod
     async def create(self, user: User) -> User:
         pass
+
+    @abstractmethod
+    async def update_full_name(self, user_id: UUID, full_name: str) -> None:
+        pass

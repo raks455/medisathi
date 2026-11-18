@@ -10,6 +10,7 @@ from uuid import UUID
 
 from app.domain.entities.feedback import Feedback
 from app.domain.entities.health_record import HealthRecord
+from app.domain.entities.user_profile import UserProfile
 from app.domain.entities.wellness import MoodEntry, VitalReading
 from app.domain.entities.womens_health import CyclePeriod, CycleSettings, Pregnancy
 from app.domain.value_objects.health_enums import RecordCategory, RecordFolder, VitalType
@@ -52,6 +53,12 @@ class VitalRepository(ABC):
 
     @abstractmethod
     async def latest(self, user_id: UUID, type: VitalType) -> Optional[VitalReading]: ...
+
+    @abstractmethod
+    async def get(self, user_id: UUID, reading_id: UUID) -> Optional[VitalReading]: ...
+
+    @abstractmethod
+    async def update(self, reading: VitalReading) -> VitalReading: ...
 
     @abstractmethod
     async def delete(self, user_id: UUID, reading_id: UUID) -> bool: ...
@@ -118,3 +125,13 @@ class PregnancyRepository(ABC):
 class FeedbackRepository(ABC):
     @abstractmethod
     async def add(self, feedback: Feedback) -> Feedback: ...
+
+
+class UserProfileRepository(ABC):
+    @abstractmethod
+    async def get(self, user_id: UUID) -> UserProfile:
+        """An empty profile when the user has not saved one."""
+
+    @abstractmethod
+    async def save(self, profile: UserProfile) -> UserProfile:
+        """Insert or update."""

@@ -12,7 +12,7 @@ from app.domain.entities.wellness import MoodEntry, VitalReading
 from app.domain.entities.womens_health import CyclePeriod
 from app.domain.services import vitals as vital_rules
 from app.domain.value_objects.health_enums import (
-    FeedbackTopic, Flow, Mood, RecordCategory, RecordFolder, VitalType,
+    BloodGroup, FeedbackTopic, Flow, Gender, Mood, RecordCategory, RecordFolder, VitalType,
 )
 
 
@@ -102,8 +102,7 @@ class VitalCreateRequest(BaseModel):
             self.recorded_at = datetime.now(timezone.utc)
         elif self.recorded_at.tzinfo is None:
             self.recorded_at = self.recorded_at.replace(tzinfo=timezone.utc)
-        if self.recorded_at > datetime.now(timezone.utc).replace(microsecond=0) \
-                .__add__(__import__("datetime").timedelta(minutes=5)):
+        if self.recorded_at > datetime.now(timezone.utc) + timedelta(minutes=5):
             raise ValueError("recorded_at cannot be in the future")
         return self
 
@@ -304,3 +303,58 @@ class FeedbackRequest(BaseModel):
 
     _strip = field_validator("message", "app_version", "platform", mode="before")(
         lambda cls, v: _clean(v))
+
+
+# ---- profile --------------------------------------------------------------
+
+def _clean_list(values: List[str]) -> List[str]:
+    """Trimmed, without blanks or repeats (ignoring case)."""
+    seen: List[str] = []
+    for item in values:
+        item = " ".join(str(item).split())[:60]
+        if item and item.lower() not in (s.lower() for s in seen):
+            seen.append(item)
+    return seen
+
+
+class ProfileUpdateRequest(BaseModel):
+    """Replaces the whole profile: a field left out is cleared."""
+    full_name: str = Field(..., min_length=2, max_length=100)
+    date_of_birth: Optional[date] = None
+    gender: Optional[Gender] = None
+    blood_group: Optional[BloodGroup] = None
+    conditions: List[str] = Field(default_factory=list, max_length=30,
+                                  examples=[["Diabetes", "High blood pressure"]])
+    allergies: List[str] = Field(default_factory=list, max_length=30)
+
+    @field_validator("full_name", mode="before")
+    @classmethod
+    def _strip_name(cls, v):
+        return v.strip() if isinstance(v, str) else v
+
+    _lists = field_validator("conditions", "allergies")(lambda cls, v: _clean_list(v))
+
+    @field_validator("date_of_birth")
+    @classmethod
+    def _valid_birth(cls, v: Optional[date]) -> Optional[date]:
+        if v is None:
+            return v
+        # A day of slack: the phone may be ahead of UTC.
+        today = datetime.now(timezone.utc).date() + timedelta(days=1)
+        if v > today:
+            raise ValueError("Date of birth cannot be in the future")
+        if v.year < today.year - 130:
+            raise ValueError("Date of birth is too far in the past")
+        return v
+
+
+class ProfileResponse(BaseModel):
+    user_id: UUID
+    email: str
+    full_name: str
+    date_of_birth: Optional[date] = None
+    age: Optional[int] = Field(None, description="Full years, from date_of_birth")
+    gender: Optional[Gender] = None
+    blood_group: Optional[BloodGroup] = None
+    conditions: List[str] = Field(default_factory=list)
+    allergies: List[str] = Field(default_factory=list)

@@ -116,7 +116,8 @@ def get_notification_repository(session: AsyncSession = Depends(get_db)):
 from app.infrastructure.database.repositories.health_repositories import (  # noqa: E402
     SQLAlchemyCycleRepository, SQLAlchemyFeedbackRepository,
     SQLAlchemyHealthRecordRepository, SQLAlchemyMoodRepository,
-    SQLAlchemyPregnancyRepository, SQLAlchemyVitalRepository,
+    SQLAlchemyPregnancyRepository, SQLAlchemyUserProfileRepository,
+    SQLAlchemyVitalRepository,
 )
 
 
@@ -142,3 +143,7 @@ def get_pregnancy_repository(session: AsyncSession = Depends(get_db)):
 
 def get_feedback_repository(session: AsyncSession = Depends(get_db)):
     return SQLAlchemyFeedbackRepository(session)
+
+
+def get_user_profile_repository(session: AsyncSession = Depends(get_db)):
+    return SQLAlchemyUserProfileRepository(session)
