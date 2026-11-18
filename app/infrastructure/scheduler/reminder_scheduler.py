@@ -1,10 +1,15 @@
 import asyncio
 import logging
+import time
 
 from app.application.use_cases.reminder.dispatch_due_reminders import (
     DispatchDueRemindersUseCase, DispatchRefillRemindersUseCase,
 )
+from app.application.use_cases.health.cycle_reminders import DispatchCycleRemindersUseCase
 from app.config import settings
+from app.infrastructure.database.repositories.health_repositories import (
+    SQLAlchemyCycleRepository,
+)
 from app.infrastructure.database.repositories.device_token_repository import (
     SQLAlchemyDeviceTokenRepository,
 )
@@ -19,6 +24,10 @@ from app.infrastructure.database.session import AsyncSessionLocal
 from app.infrastructure.notifications.push_notifier import FCMPushNotifier
 
 logger = logging.getLogger("uvicorn.error")
+
+# Period reminders are daily, so checking every few minutes is plenty.
+_CYCLE_CHECK_SECONDS = 600
+_last_cycle_check = 0.0
 
 
 async def run_once() -> int:
@@ -46,7 +55,19 @@ async def run_once() -> int:
             push=push,
             send_from_hour=settings.REFILL_REMINDER_HOUR,
         )
-        return await doses.execute() + await refills.execute()
+        sent = await doses.execute() + await refills.execute()
+
+        global _last_cycle_check
+        if time.monotonic() - _last_cycle_check >= _CYCLE_CHECK_SECONDS:
+            _last_cycle_check = time.monotonic()
+            sent += await DispatchCycleRemindersUseCase(
+                cycle_repo=SQLAlchemyCycleRepository(session),
+                device_repo=device_repo,
+                notification_repo=notification_repo,
+                push=push,
+                send_from_hour=settings.REFILL_REMINDER_HOUR,
+            ).execute()
+        return sent
 
 
 async def reminder_loop() -> None:
@@ -55,7 +76,7 @@ async def reminder_loop() -> None:
         try:
             sent = await run_once()
             if sent:
-                logger.info("Sent %d medication / refill reminder(s)", sent)
+                logger.info("Sent %d medication / refill / cycle reminder(s)", sent)
         except asyncio.CancelledError:
             raise
         except Exception:

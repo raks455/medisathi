@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     REFILL_REMINDER_HOUR: int = 9                # local hour from which refill reminders are sent
     DOSE_MISSED_AFTER_MINUTES: int = 60          # an unanswered dose counts as missed after this
 
+    # Health records (files are stored in Postgres)
+    HEALTH_RECORD_MAX_FILE_MB: int = 10
+    HEALTH_RECORD_QUOTA_MB: int = 200            # per user, all folders together
+
     class Config:
         env_file = ".env"
         case_sensitive = True

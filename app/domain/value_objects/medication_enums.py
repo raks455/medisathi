@@ -53,4 +53,5 @@ class NotificationType(str, Enum):
     """Kinds of entries in the in-app notification list."""
     MEDICATION_REMINDER = "medication_reminder"
     REFILL_REMINDER = "refill_reminder"
+    PERIOD_REMINDER = "period_reminder"
     TEST = "test"

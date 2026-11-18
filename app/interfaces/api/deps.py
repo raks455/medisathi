@@ -109,3 +109,36 @@ def get_push_service() -> FCMPushNotifier:
 
 def get_notification_repository(session: AsyncSession = Depends(get_db)):
     return SQLAlchemyNotificationRepository(session)
+
+
+# ---- health records, vitals, mood, cycle, pregnancy, feedback ----
+
+from app.infrastructure.database.repositories.health_repositories import (  # noqa: E402
+    SQLAlchemyCycleRepository, SQLAlchemyFeedbackRepository,
+    SQLAlchemyHealthRecordRepository, SQLAlchemyMoodRepository,
+    SQLAlchemyPregnancyRepository, SQLAlchemyVitalRepository,
+)
+
+
+def get_health_record_repository(session: AsyncSession = Depends(get_db)):
+    return SQLAlchemyHealthRecordRepository(session)
+
+
+def get_vital_repository(session: AsyncSession = Depends(get_db)):
+    return SQLAlchemyVitalRepository(session)
+
+
+def get_mood_repository(session: AsyncSession = Depends(get_db)):
+    return SQLAlchemyMoodRepository(session)
+
+
+def get_cycle_repository(session: AsyncSession = Depends(get_db)):
+    return SQLAlchemyCycleRepository(session)
+
+
+def get_pregnancy_repository(session: AsyncSession = Depends(get_db)):
+    return SQLAlchemyPregnancyRepository(session)
+
+
+def get_feedback_repository(session: AsyncSession = Depends(get_db)):
+    return SQLAlchemyFeedbackRepository(session)
